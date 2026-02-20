@@ -129,6 +129,13 @@ export default function AdminDashboard() {
       icon: Users,
       color: 'bg-green-600',
     },
+    {
+  title: 'Manage Users',
+  description: 'View all registered users',
+  href: '/admin/users',
+  icon: Users,
+  color: 'bg-purple-600',
+},
   ];
 
   const getStatusBadge = (status: string) => {

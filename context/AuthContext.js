@@ -18,25 +18,25 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      fetchUser();
-    } else {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const response = await authAPI.getMe();
+          setUser(response.data.data);
+        } catch (error) {
+          console.error('Auth check failed:', error);
+          localStorage.removeItem('token');
+          setUser(null);
+        }
+      } else {
+        setUser(null); // Explicitly set to null when no token
+      }
       setLoading(false);
-    }
-  }, []);
+    };
 
-  const fetchUser = async () => {
-    try {
-      const response = await authAPI.getMe();
-      setUser(response.data.data);
-    } catch (error) {
-      console.error('Failed to fetch user:', error);
-      localStorage.removeItem('token');
-    } finally {
-      setLoading(false);
-    }
-  };
+    checkAuth();
+  }, []);
 
   const login = async (username, password) => {
     try {

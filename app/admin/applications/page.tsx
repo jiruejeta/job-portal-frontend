@@ -17,7 +17,8 @@ import {
   Mail,
   Phone,
   GraduationCap,
-  Calendar
+  Calendar,
+  FileText
 } from 'lucide-react';
 
 type Application = {
@@ -46,6 +47,7 @@ export default function AdminApplicationsPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -81,9 +83,22 @@ export default function AdminApplicationsPage() {
   };
 
   const handleStatusChange = async (applicationId: string, newStatus: 'approved' | 'rejected') => {
+    setActionLoading(applicationId);
+    
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applications/${applicationId}/${newStatus}`, {
+      
+      if (!token) {
+        alert('You are not logged in. Please login again.');
+        router.push('/login');
+        return;
+      }
+
+      console.log('Attempting to', newStatus, 'application:', applicationId);
+      
+      // Determine the correct endpoint based on status
+const endpoint = newStatus === 'approved' ? 'approve' : 'reject';
+const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applications/${applicationId}/${endpoint}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -91,7 +106,10 @@ export default function AdminApplicationsPage() {
         },
       });
 
+      console.log('Response status:', response.status);
+      
       const data = await response.json();
+      console.log('Response data:', data);
 
       if (response.ok) {
         // Update local state
@@ -99,16 +117,21 @@ export default function AdminApplicationsPage() {
           app._id === applicationId ? { ...app, status: newStatus } : app
         ));
         
+        alert(`Application ${newStatus} successfully!`);
+        
         // If modal is open, close it
         if (selectedApp?._id === applicationId) {
           setSelectedApp(null);
           setShowModal(false);
         }
       } else {
-        alert(data.error || `Failed to ${newStatus} application`);
+        alert(data.error || `Failed to ${newStatus} application (Status: ${response.status})`);
       }
     } catch (error) {
-      alert('Failed to update application status');
+      console.error('Error details:', error);
+      alert('Failed to update application status. Check console for details (F12)');
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -144,7 +167,8 @@ export default function AdminApplicationsPage() {
     const matchesSearch = 
       app.applicantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      app.jobId?.title.toLowerCase().includes(searchTerm.toLowerCase());
+      app.jobId?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.exitExam && app.exitExam.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
     
@@ -206,7 +230,7 @@ export default function AdminApplicationsPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by name, email, or job title..."
+                placeholder="Search by name, email, job title, or exit exam..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -268,7 +292,7 @@ export default function AdminApplicationsPage() {
                 <div className="p-6 space-y-3">
                   <div className="flex items-center text-sm text-gray-600">
                     <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                    {app.email}
+                    <span className="truncate">{app.email}</span>
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <Phone className="h-4 w-4 mr-2 text-gray-400" />
@@ -279,8 +303,12 @@ export default function AdminApplicationsPage() {
                     GPA: {app.gpa}
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
+                    <FileText className="h-4 w-4 mr-2 text-gray-400" />
+                    Exit: {app.exitExam || 'N/A'}
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
                     <Calendar className="h-4 w-4 mr-2 text-gray-400" />
-                    Applied: {new Date(app.appliedAt).toLocaleDateString()}
+                    {new Date(app.appliedAt).toLocaleDateString()}
                   </div>
                 </div>
 
@@ -301,17 +329,31 @@ export default function AdminApplicationsPage() {
                     <>
                       <button
                         onClick={() => handleStatusChange(app._id, 'approved')}
-                        className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
+                        disabled={actionLoading === app._id}
+                        className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-1 disabled:bg-green-300 disabled:cursor-not-allowed"
                       >
-                        <CheckCircle className="h-4 w-4" />
-                        Approve
+                        {actionLoading === app._id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            Approve
+                          </>
+                        )}
                       </button>
                       <button
                         onClick={() => handleStatusChange(app._id, 'rejected')}
-                        className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
+                        disabled={actionLoading === app._id}
+                        className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center gap-1 disabled:bg-red-300 disabled:cursor-not-allowed"
                       >
-                        <XCircle className="h-4 w-4" />
-                        Reject
+                        {actionLoading === app._id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4" />
+                            Reject
+                          </>
+                        )}
                       </button>
                     </>
                   )}
@@ -381,19 +423,33 @@ export default function AdminApplicationsPage() {
                     onClick={() => {
                       handleStatusChange(selectedApp._id, 'approved');
                     }}
-                    className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2"
+                    disabled={actionLoading === selectedApp._id}
+                    className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:bg-green-300"
                   >
-                    <CheckCircle className="h-5 w-5" />
-                    Approve Application
+                    {actionLoading === selectedApp._id ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <CheckCircle className="h-5 w-5" />
+                        Approve Application
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => {
                       handleStatusChange(selectedApp._id, 'rejected');
                     }}
-                    className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2"
+                    disabled={actionLoading === selectedApp._id}
+                    className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:bg-red-300"
                   >
-                    <XCircle className="h-5 w-5" />
-                    Reject Application
+                    {actionLoading === selectedApp._id ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <XCircle className="h-5 w-5" />
+                        Reject Application
+                      </>
+                    )}
                   </button>
                 </div>
               )}
