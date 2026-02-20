@@ -18,7 +18,8 @@ import {
   Clock,
   Eye,
   Shield,
-  UserCog
+  Key,
+  Copy
 } from 'lucide-react';
 
 type UserType = {
@@ -32,10 +33,12 @@ type UserType = {
   isApproved: boolean;
   createdAt: string;
   faydaId?: string;
+  // For development only - plain password from approval
+  plainPassword?: string;
 };
 
 export default function AdminUsersPage() {
-  const { isAuthenticated } = useAuth(); // Only check authentication, not admin role
+  const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,9 +47,10 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [selectedUser, setSelectedUser] = useState<UserType | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showPassword, setShowPassword] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState('');
 
   useEffect(() => {
-    // Only check if logged in, don't check admin role
     if (!isAuthenticated) {
       router.push('/login');
     } else {
@@ -55,36 +59,17 @@ export default function AdminUsersPage() {
   }, [isAuthenticated, router]);
 
   const fetchUsers = async () => {
-  try {
-    const token = localStorage.getItem('token');
-    console.log('Fetching users with token:', token ? 'Token exists' : 'No token');
-    
-    // Try both endpoints to see which works
-    const response = await fetch('https://job-portal-dvmp.onrender.com/api/users/all', {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-      },
-    });
-    
-    console.log('Response status:', response.status);
-    
-    if (response.status === 404) {
-      // If 404, try the other endpoint
-      console.log('Trying alternative endpoint...');
-      const altResponse = await fetch('https://job-portal-dvmp.onrender.com/api/users', {
+    try {
+      const token = localStorage.getItem('token');
+      console.log('Fetching users with token:', token ? 'Token exists' : 'No token');
+      
+      const response = await fetch('http://localhost:5000/api/users', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-      const altData = await altResponse.json();
-      console.log('Alternative response:', altData);
       
-      if (altResponse.ok) {
-        setUsers(altData.data);
-      } else {
-        setError(altData.error || 'Failed to fetch users');
-      }
-    } else {
+      console.log('Response status:', response.status);
       const data = await response.json();
       console.log('Response data:', data);
       
@@ -93,14 +78,19 @@ export default function AdminUsersPage() {
       } else {
         setError(data.error || 'Failed to fetch users');
       }
+    } catch (error) {
+      console.error('Fetch error:', error);
+      setError('Failed to connect to server');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Fetch error:', error);
-    setError('Failed to connect to server');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopySuccess('Copied!');
+    setTimeout(() => setCopySuccess(''), 2000);
+  };
 
   const getRoleBadge = (role: string) => {
     if (role === 'admin') {
@@ -207,6 +197,19 @@ export default function AdminUsersPage() {
           </div>
         )}
 
+        {copySuccess && (
+          <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded-lg shadow-lg z-50">
+            {copySuccess}
+          </div>
+        )}
+
+        {/* Development Warning */}
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-6 py-3 rounded-lg mb-6">
+          <p className="text-sm font-medium">
+            ⚠️ DEVELOPMENT MODE: Passwords are only visible at the moment of approval and cannot be retrieved later.
+          </p>
+        </div>
+
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -259,6 +262,9 @@ export default function AdminUsersPage() {
                       Username
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Password
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Contact
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -297,6 +303,26 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-mono text-gray-900">{user.username}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">
+                            {showPassword === user._id ? (
+                              <span className="text-green-600 font-bold">••••••••</span>
+                            ) : (
+                              <span className="text-red-600">🔒 Hashed</span>
+                            )}
+                          </span>
+                          {user.role === 'applicant' && (
+                            <button
+                              onClick={() => setShowPassword(user._id)}
+                              className="text-blue-600 hover:text-blue-800"
+                              title="Password is hashed and cannot be retrieved"
+                            >
+                              <Key className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{user.email}</div>
@@ -415,10 +441,39 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
+              {/* Password Section */}
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  Password Information
+                </h3>
+                <div className="space-y-3">
+                  <div className="bg-white p-3 rounded-lg border border-blue-100">
+                    <p className="text-sm text-gray-600 mb-1">Password Status:</p>
+                    <p className="text-sm font-medium text-red-600">
+                      🔒 Password is hashed and cannot be displayed
+                    </p>
+                  </div>
+                  
+                  {selectedUser.role === 'applicant' && (
+                    <div className="bg-yellow-50 p-3 rounded-lg">
+                      <p className="text-sm text-yellow-800">
+                        <span className="font-bold">Need to reset password?</span><br />
+                        Use the "Forgot Password" feature on the login page, or have the admin approve a new application.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Security Note */}
-              <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
-                <p className="text-sm text-yellow-700">
-                  <span className="font-medium">🔒 Security Note:</span> Passwords are hashed and cannot be displayed for security reasons.
+              <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                <p className="text-sm text-red-700">
+                  <span className="font-medium">⚠️ IMPORTANT SECURITY NOTE:</span><br />
+                  - Passwords are one-way hashed and cannot be retrieved<br />
+                  - Never store or share plain text passwords<br />
+                  - Users must use "Forgot Password" if they lose access<br />
+                  - This is by design for your security
                 </p>
               </div>
             </div>
