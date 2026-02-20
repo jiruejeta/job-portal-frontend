@@ -18,7 +18,8 @@ import {
   Phone,
   GraduationCap,
   Calendar,
-  FileText
+  FileText,
+  Copy
 } from 'lucide-react';
 
 type Application = {
@@ -37,6 +38,12 @@ type Application = {
   };
 };
 
+type Credentials = {
+  username: string;
+  password: string;
+  name: string;
+};
+
 export default function AdminApplicationsPage() {
   const { isAuthenticated, isAdmin } = useAuth();
   const router = useRouter();
@@ -48,6 +55,11 @@ export default function AdminApplicationsPage() {
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  
+  // New state for password modal
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newCredentials, setNewCredentials] = useState<Credentials | null>(null);
+  const [copySuccess, setCopySuccess] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -82,6 +94,12 @@ export default function AdminApplicationsPage() {
     }
   };
 
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopySuccess(`${field} copied!`);
+    setTimeout(() => setCopySuccess(''), 2000);
+  };
+
   const handleStatusChange = async (applicationId: string, newStatus: 'approved' | 'rejected') => {
     setActionLoading(applicationId);
     
@@ -96,9 +114,8 @@ export default function AdminApplicationsPage() {
 
       console.log('Attempting to', newStatus, 'application:', applicationId);
       
-      // Determine the correct endpoint based on status
-const endpoint = newStatus === 'approved' ? 'approve' : 'reject';
-const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applications/${applicationId}/${endpoint}`, {
+      const endpoint = newStatus === 'approved' ? 'approve' : 'reject';
+      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applications/${applicationId}/${endpoint}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -117,7 +134,17 @@ const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applicati
           app._id === applicationId ? { ...app, status: newStatus } : app
         ));
         
-        alert(`Application ${newStatus} successfully!`);
+        // If approved and credentials are returned, show them in modal
+        if (newStatus === 'approved' && data.data?.user?.password) {
+          setNewCredentials({
+            username: data.data.user.username,
+            password: data.data.user.password,
+            name: data.data.user.name
+          });
+          setShowPasswordModal(true);
+        } else {
+          alert(`Application ${newStatus} successfully!`);
+        }
         
         // If modal is open, close it
         if (selectedApp?._id === applicationId) {
@@ -185,6 +212,13 @@ const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applicati
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Copy Success Notification */}
+      {copySuccess && (
+        <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded-lg shadow-lg z-50">
+          {copySuccess}
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -453,6 +487,82 @@ const response = await fetch(`https://job-portal-dvmp.onrender.com/api/applicati
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Password Generation Modal */}
+      {showPasswordModal && newCredentials && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900">🎉 Application Approved!</h2>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                <p className="text-green-800 font-medium mb-3">
+                  Credentials generated for <span className="font-bold">{newCredentials.name}</span>:
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm text-gray-600 block mb-1">Username</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white p-3 rounded-lg border border-green-300 font-mono text-lg">
+                        {newCredentials.username}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(newCredentials.username, 'Username')}
+                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        title="Copy username"
+                      >
+                        <Copy className="h-4 w-4 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm text-gray-600 block mb-1">Password</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white p-3 rounded-lg border border-green-300 font-mono text-lg">
+                        {newCredentials.password}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(newCredentials.password, 'Password')}
+                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        title="Copy password"
+                      >
+                        <Copy className="h-4 w-4 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <span className="font-bold">⚠️ Important Security Notice:</span>
+                </p>
+                <ul className="text-sm text-yellow-700 mt-2 list-disc list-inside">
+                  <li>These credentials will only be shown <span className="font-bold">ONCE</span></li>
+                  <li>Share them securely with the applicant</li>
+                  <li>They can login at <code className="bg-yellow-100 px-1">/login</code> with these credentials</li>
+                  <li>Password cannot be retrieved later for security reasons</li>
+                  <li>Ask applicant to change password after first login</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setNewCredentials(null);
+                }}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                I've Saved the Credentials
+              </button>
             </div>
           </div>
         </div>
