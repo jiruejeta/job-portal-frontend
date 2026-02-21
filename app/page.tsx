@@ -21,7 +21,8 @@ import {
   Facebook,
   Twitter,
   Linkedin,
-  Instagram
+  Instagram,
+  DollarSign
 } from 'lucide-react';
 
 type Job = {
@@ -29,6 +30,9 @@ type Job = {
   title: string;
   department: string;
   description: string;
+  salary: string;
+  location: string;
+  jobType: string;
   deadline: string;
 };
 
@@ -54,6 +58,16 @@ export default function Home() {
       console.error('Failed to fetch jobs:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getJobTypeColor = (type: string) => {
+    switch(type) {
+      case 'Full-time': return 'bg-green-100 text-green-800';
+      case 'Part-time': return 'bg-blue-100 text-blue-800';
+      case 'Contract': return 'bg-purple-100 text-purple-800';
+      case 'Remote': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -168,7 +182,7 @@ export default function Home() {
                     <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Job title or keyword"
+                      placeholder="Job title, department, or location..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-full pl-12 pr-4 py-4 text-gray-900 rounded-xl sm:rounded-l-xl sm:rounded-r-none focus:outline-none"
@@ -275,25 +289,54 @@ export default function Home() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {jobs.map((job) => (
                 <div key={job._id} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow p-6">
+                  {/* Header with Job Type Badge */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="bg-blue-100 p-3 rounded-xl">
                       <Briefcase className="h-6 w-6 text-blue-600" />
                     </div>
-                    <span className="text-sm text-gray-500">
-                      {new Date(job.deadline).toLocaleDateString()}
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getJobTypeColor(job.jobType)}`}>
+                      {job.jobType || 'Full-time'}
                     </span>
                   </div>
+
+                  {/* Job Title */}
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{job.title}</h3>
-                  <p className="text-gray-600 mb-4 line-clamp-2">{job.description}</p>
-                  <div className="flex items-center text-gray-500 mb-4">
+                  
+                  {/* Department */}
+                  <div className="flex items-center text-gray-600 mb-3">
                     <Building className="h-4 w-4 mr-2" />
                     <span className="text-sm">{job.department}</span>
                   </div>
+
+                  {/* Location & Salary */}
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center text-gray-600">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      <span className="text-sm">{job.location || 'Location not specified'}</span>
+                    </div>
+                    <div className="flex items-center text-gray-600">
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      <span className="text-sm font-medium text-green-600">{job.salary || 'Salary not specified'}</span>
+                    </div>
+                  </div>
+
+                  {/* Description Preview */}
+                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">{job.description}</p>
+
+                  {/* Deadline */}
+                  <div className="flex items-center text-gray-500 mb-4">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    <span className="text-sm">
+                      Deadline: {new Date(job.deadline).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  {/* Apply Link */}
                   <Link
-                    href={`/jobs/${job._id}/apply`}
+                    href={`/jobs/${job._id}`}
                     className="inline-flex items-center text-blue-600 font-semibold hover:text-blue-800"
                   >
-                    Apply Now
+                    View Details
                     <ArrowRight className="h-4 w-4 ml-2" />
                   </Link>
                 </div>

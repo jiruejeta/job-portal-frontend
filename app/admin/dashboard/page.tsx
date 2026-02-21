@@ -3,7 +3,16 @@
 import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Briefcase, Users, FileText, LogOut, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { 
+  Briefcase, 
+  Users, 
+  FileText, 
+  LogOut, 
+  CheckCircle, 
+  XCircle, 
+  Clock,
+  IdCard  // Add this
+} from 'lucide-react';
 
 type Stats = {
   totalJobs: number;
@@ -115,6 +124,13 @@ export default function AdminDashboard() {
       icon: Briefcase,
       color: 'bg-blue-600',
     },
+    {
+  title: 'ID Approvals',
+  description: 'Review and approve applicant ID photos',
+  href: '/admin/id-approvals',
+  icon: IdCard,
+  color: 'bg-purple-600',
+},
     {
       title: 'Review Applications',
       description: 'Check pending applications',

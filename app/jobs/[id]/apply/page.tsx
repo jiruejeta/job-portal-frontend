@@ -15,7 +15,10 @@ import {
   FileText, 
   Send,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  DollarSign,
+  Clock
 } from 'lucide-react';
 
 type Job = {
@@ -24,6 +27,9 @@ type Job = {
   department: string;
   description: string;
   requirements: string;
+  salary: string;
+  location: string;
+  jobType: string;
   deadline: string;
 };
 
@@ -124,6 +130,16 @@ export default function ApplyPage() {
     }
   };
 
+  const getJobTypeColor = (type: string) => {
+    switch(type) {
+      case 'Full-time': return 'bg-green-100 text-green-800';
+      case 'Part-time': return 'bg-blue-100 text-blue-800';
+      case 'Contract': return 'bg-purple-100 text-purple-800';
+      case 'Remote': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-gray-50 to-white">
@@ -218,17 +234,37 @@ export default function ApplyPage() {
                 <Briefcase className="h-6 w-6 text-blue-600" />
               </div>
               <div className="flex-1">
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-                  {job.title}
-                </h1>
-                
-                <div className="flex flex-wrap gap-4 mb-3">
-                  <span className="flex items-center text-gray-600">
-                    <Building className="h-4 w-4 mr-1" />
-                    {job.department}
+                <div className="flex items-center justify-between mb-2">
+                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                    {job.title}
+                  </h1>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getJobTypeColor(job.jobType)}`}>
+                    {job.jobType || 'Full-time'}
                   </span>
-                  <span className="flex items-center text-gray-600">
-                    <Calendar className="h-4 w-4 mr-1" />
+                </div>
+                
+                {/* Department */}
+                <div className="flex items-center text-gray-600 mb-2">
+                  <Building className="h-4 w-4 mr-2" />
+                  <span>{job.department}</span>
+                </div>
+
+                {/* Location & Salary Grid */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="flex items-center text-gray-600">
+                    <MapPin className="h-4 w-4 mr-2" />
+                    <span className="text-sm">{job.location || 'Location not specified'}</span>
+                  </div>
+                  <div className="flex items-center text-gray-600">
+                    <DollarSign className="h-4 w-4 mr-2" />
+                    <span className="text-sm font-medium text-green-600">{job.salary || 'Salary not specified'}</span>
+                  </div>
+                </div>
+
+                {/* Deadline */}
+                <div className="flex items-center text-gray-600 mb-3">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  <span className="text-sm">
                     Deadline: {new Date(job.deadline).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'long',
@@ -237,9 +273,21 @@ export default function ApplyPage() {
                   </span>
                 </div>
 
-                <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-lg">
-                  {job.description}
-                </p>
+                {/* Description */}
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Job Description</h3>
+                  <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-lg">
+                    {job.description}
+                  </p>
+                </div>
+
+                {/* Requirements */}
+                <div className="mt-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Requirements</h3>
+                  <p className="text-gray-600 text-sm bg-gray-50 p-3 rounded-lg">
+                    {job.requirements}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
