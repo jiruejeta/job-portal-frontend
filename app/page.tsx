@@ -71,6 +71,10 @@ export default function Home() {
     }
   };
 
+  const isDeadlinePassed = (deadline: string) => {
+    return new Date(deadline) < new Date();
+  };
+
   const stats = [
     { icon: Users, value: '10K+', label: 'Active Users' },
     { icon: Building, value: '500+', label: 'Companies' },
@@ -287,60 +291,67 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {jobs.map((job) => (
-                <div key={job._id} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow p-6">
-                  {/* Header with Job Type Badge */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="bg-blue-100 p-3 rounded-xl">
-                      <Briefcase className="h-6 w-6 text-blue-600" />
+              {jobs.map((job) => {
+                const deadlinePassed = isDeadlinePassed(job.deadline);
+                
+                return (
+                  <div key={job._id} className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow p-6">
+                    {/* Header with Job Type Badge */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="bg-blue-100 p-3 rounded-xl">
+                        <Briefcase className="h-6 w-6 text-blue-600" />
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getJobTypeColor(job.jobType)}`}>
+                        {job.jobType || 'Full-time'}
+                      </span>
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getJobTypeColor(job.jobType)}`}>
-                      {job.jobType || 'Full-time'}
-                    </span>
-                  </div>
 
-                  {/* Job Title */}
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">{job.title}</h3>
-                  
-                  {/* Department */}
-                  <div className="flex items-center text-gray-600 mb-3">
-                    <Building className="h-4 w-4 mr-2" />
-                    <span className="text-sm">{job.department}</span>
-                  </div>
-
-                  {/* Location & Salary */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center text-gray-600">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      <span className="text-sm">{job.location || 'Location not specified'}</span>
+                    {/* Job Title */}
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">{job.title}</h3>
+                    
+                    {/* Department */}
+                    <div className="flex items-center text-gray-600 mb-3">
+                      <Building className="h-4 w-4 mr-2" />
+                      <span className="text-sm">{job.department}</span>
                     </div>
-                    <div className="flex items-center text-gray-600">
-                      <DollarSign className="h-4 w-4 mr-2" />
-                      <span className="text-sm font-medium text-green-600">{job.salary || 'Salary not specified'}</span>
+
+                    {/* Location & Salary */}
+                    <div className="space-y-2 mb-4">
+                      <div className="flex items-center text-gray-600">
+                        <MapPin className="h-4 w-4 mr-2" />
+                        <span className="text-sm">{job.location || 'Location not specified'}</span>
+                      </div>
+                      <div className="flex items-center text-gray-600">
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        <span className="text-sm font-medium text-green-600">{job.salary || 'Salary not specified'}</span>
+                      </div>
                     </div>
+
+                    {/* Description Preview */}
+                    <p className="text-gray-600 text-sm mb-4 line-clamp-2">{job.description}</p>
+
+                    {/* Deadline */}
+                    <div className="flex items-center text-gray-500 mb-4">
+                      <Calendar className="h-4 w-4 mr-2" />
+                      <span className="text-sm">
+                        Deadline: {new Date(job.deadline).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    {/* Apply Button - Changed from View Details to Apply Now */}
+                    <Link
+                      href={`/jobs/${job._id}/apply`}
+                      className={`block w-full text-center py-2 px-4 rounded-lg font-medium transition-colors ${
+                        deadlinePassed
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed pointer-events-none'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
+                    >
+                      {deadlinePassed ? 'Applications Closed' : 'Apply Now'}
+                    </Link>
                   </div>
-
-                  {/* Description Preview */}
-                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">{job.description}</p>
-
-                  {/* Deadline */}
-                  <div className="flex items-center text-gray-500 mb-4">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    <span className="text-sm">
-                      Deadline: {new Date(job.deadline).toLocaleDateString()}
-                    </span>
-                  </div>
-
-                  {/* Apply Link */}
-                  <Link
-                    href={`/jobs/${job._id}`}
-                    className="inline-flex items-center text-blue-600 font-semibold hover:text-blue-800"
-                  >
-                    View Details
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Link>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

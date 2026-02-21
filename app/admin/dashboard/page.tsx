@@ -11,7 +11,7 @@ import {
   CheckCircle, 
   XCircle, 
   Clock,
-  IdCard  // Add this
+  IdCard
 } from 'lucide-react';
 
 type Stats = {
@@ -125,12 +125,12 @@ export default function AdminDashboard() {
       color: 'bg-blue-600',
     },
     {
-  title: 'ID Approvals',
-  description: 'Review and approve applicant ID photos',
-  href: '/admin/id-approvals',
-  icon: IdCard,
-  color: 'bg-purple-600',
-},
+      title: 'ID Approvals',
+      description: 'Review and approve applicant ID photos',
+      href: '/admin/id-approvals',
+      icon: IdCard,
+      color: 'bg-purple-600',
+    },
     {
       title: 'Review Applications',
       description: 'Check pending applications',
@@ -146,12 +146,12 @@ export default function AdminDashboard() {
       color: 'bg-green-600',
     },
     {
-  title: 'Manage Users',
-  description: 'View all registered users',
-  href: '/admin/users',
-  icon: Users,
-  color: 'bg-purple-600',
-},
+      title: 'Manage Users',
+      description: 'View all registered users',
+      href: '/admin/users',
+      icon: Users,
+      color: 'bg-purple-600',
+    },
   ];
 
   const getStatusBadge = (status: string) => {
