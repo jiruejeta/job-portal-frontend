@@ -2,8 +2,9 @@
 
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { 
   User, 
   Briefcase, 
@@ -17,8 +18,16 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  Eye
+  Eye,
+  Camera,
+  QrCode,
+  Building,
+  MapPin,
+  DollarSign,
+  Download,
+  IdCard
 } from 'lucide-react';
+import * as QRCode from 'qrcode.react';
 
 type ApplicantProfile = {
   _id: string;
@@ -29,7 +38,7 @@ type ApplicantProfile = {
   faydaId: string;
   address: string;
   department: string;
-  createdAt?: string; // Added optional createdAt property
+  createdAt?: string;
   documents: Array<{
     url: string;
     type: string;
@@ -49,16 +58,38 @@ type Application = {
   exitExam: string;
 };
 
+type Employee = {
+  _id: string;
+  employeeId: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  photo: string;
+  jobTitle: string;
+  department: string;
+  salary: string;
+  location: string;
+  jobType: string;
+  startDate: string;
+  status: string;
+  qrCode: string;
+};
+
 export default function ApplicantDashboard() {
   const { user, isAuthenticated, isApplicant, logout } = useAuth();
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ApplicantProfile | null>(null);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [employee, setEmployee] = useState<Employee | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [showQRModal, setShowQRModal] = useState(false);
   
   const [formData, setFormData] = useState({
     faydaId: '',
@@ -75,6 +106,7 @@ export default function ApplicantDashboard() {
     } else {
       fetchProfile();
       fetchApplications();
+      fetchEmployeeProfile();
     }
   }, [isAuthenticated, isApplicant, router]);
 
@@ -100,6 +132,25 @@ export default function ApplicantDashboard() {
       }
     } catch (error) {
       console.error('Failed to fetch profile:', error);
+    }
+  };
+
+  const fetchEmployeeProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('https://job-portal-dvmp.onrender.com/api/employee/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setEmployee(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch employee profile:', error);
     } finally {
       setLoading(false);
     }
@@ -117,7 +168,6 @@ export default function ApplicantDashboard() {
       const data = await response.json();
       
       if (response.ok) {
-        // Filter applications for this user (you might need to adjust this based on your API)
         setApplications(data.data || []);
       }
     } catch (error) {
@@ -159,6 +209,69 @@ export default function ApplicantDashboard() {
       setError('Failed to connect to server');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload an image file');
+      return;
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be less than 5MB');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+
+    try {
+      // Convert to base64
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Image = reader.result as string;
+        
+        const token = localStorage.getItem('token');
+        const response = await fetch('https://job-portal-dvmp.onrender.com/api/employee/photo', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ photo: base64Image }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          setEmployee(prev => prev ? { ...prev, photo: data.data.photo, qrCode: data.data.qrCode } : null);
+          setSuccess('Photo uploaded successfully!');
+        } else {
+          setError(data.error || 'Failed to upload photo');
+        }
+        setUploading(false);
+      };
+    } catch (error) {
+      setError('Failed to upload photo');
+      setUploading(false);
+    }
+  };
+
+  const downloadQRCode = () => {
+    const canvas = document.getElementById('employee-qr-code') as HTMLCanvasElement;
+    if (canvas) {
+      const url = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `${employee?.employeeId}-qrcode.png`;
+      link.href = url;
+      link.click();
     }
   };
 
@@ -222,7 +335,7 @@ export default function ApplicantDashboard() {
           </div>
 
           {/* Quick Info */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-8">
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4">
               <p className="text-sm text-blue-200">Username</p>
               <p className="text-xl font-semibold">@{user?.username}</p>
@@ -236,6 +349,12 @@ export default function ApplicantDashboard() {
             <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4">
               <p className="text-sm text-blue-200">Applications</p>
               <p className="text-xl font-semibold">{applications.length}</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-lg rounded-xl p-4">
+              <p className="text-sm text-blue-200">Employee ID</p>
+              <p className="text-xl font-semibold">
+                {employee ? employee.employeeId : 'Not Assigned'}
+              </p>
             </div>
           </div>
         </div>
@@ -252,6 +371,133 @@ export default function ApplicantDashboard() {
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-xl">
             {error}
+          </div>
+        )}
+
+        {/* Employee ID Card Section - Only show if employee exists */}
+        {employee && (
+          <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="bg-purple-100 p-3 rounded-xl">
+                <IdCard className="h-6 w-6 text-purple-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-900">Employee ID Card</h2>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* ID Card Front */}
+              <div className="md:col-span-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-6 text-white shadow-xl">
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <div className="text-2xl font-bold mb-1">{employee.fullName}</div>
+                    <div className="text-blue-200">{employee.jobTitle}</div>
+                  </div>
+                  <div className="bg-white/20 p-2 rounded-lg">
+                    <Briefcase className="h-6 w-6" />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <div className="text-xs text-blue-200">Employee ID</div>
+                    <div className="font-mono text-sm">{employee.employeeId}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-200">Department</div>
+                    <div>{employee.department}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-200">Location</div>
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      {employee.location || 'N/A'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-blue-200">Start Date</div>
+                    <div>{new Date(employee.startDate).toLocaleDateString()}</div>
+                  </div>
+                </div>
+
+                {/* Photo Placeholder */}
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 bg-white/20 rounded-lg flex items-center justify-center overflow-hidden">
+                    {employee.photo ? (
+                      <img 
+                        src={employee.photo} 
+                        alt={employee.fullName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <Camera className="h-8 w-8 text-white/60" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-sm text-blue-200">Status</div>
+                    <div className="flex items-center gap-1">
+                      <span className={`w-2 h-2 rounded-full ${employee.status === 'active' ? 'bg-green-400' : 'bg-gray-400'}`}></span>
+                      <span className="capitalize">{employee.status}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Code Section */}
+              <div className="bg-gray-50 rounded-2xl p-6 flex flex-col items-center">
+                <div className="text-sm font-medium text-gray-700 mb-3">Scan QR Code</div>
+                <div className="bg-white p-4 rounded-xl shadow-inner mb-3">
+                  {employee.qrCode ? (
+                    <img src={employee.qrCode} alt="QR Code" className="w-32 h-32" />
+                  ) : (
+                    <QrCode className="w-32 h-32 text-gray-300" />
+                  )}
+                </div>
+                <button
+                  onClick={downloadQRCode}
+                  className="flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm font-medium"
+                >
+                  <Download className="h-4 w-4" />
+                  Download QR Code
+                </button>
+              </div>
+            </div>
+
+            {/* Photo Upload */}
+            <div className="mt-6 p-4 bg-gray-50 rounded-xl">
+              <h3 className="font-semibold text-gray-900 mb-3">Upload 3x4 Photo</h3>
+              <div className="flex items-center gap-4">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handlePhotoUpload}
+                  accept="image/*"
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-300"
+                >
+                  {uploading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Uploading...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-4 w-4" />
+                      <span>Choose Photo</span>
+                    </>
+                  )}
+                </button>
+                {employee.photo && (
+                  <span className="text-sm text-green-600">✓ Photo uploaded</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Upload a clear 3x4 photo (JPG, PNG - max 5MB)
+              </p>
+            </div>
           </div>
         )}
 
