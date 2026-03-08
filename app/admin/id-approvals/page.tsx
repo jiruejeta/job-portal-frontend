@@ -4,51 +4,65 @@ import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { 
-  ArrowLeft,
-  IdCard,
-  CheckCircle,
-  XCircle,
+  ArrowLeft, 
+  Users, 
+  Search, 
+  Filter, 
+  CheckCircle, 
+  XCircle, 
   Clock,
-  Search,
-  User,
+  Eye,
+  Briefcase,
   Mail,
   Phone,
+  GraduationCap,
   Calendar,
-  Download,
-  Eye,
-  AlertCircle
+  FileText,
+  Copy,
+  IdCard
 } from 'lucide-react';
 
-type UserWithID = {
+type Application = {
   _id: string;
-  name: string;
+  applicantName: string;
   email: string;
-  phone?: string;
-  username: string;
-  idNumber?: string;
-  idPhoto?: string;
-  idStatus: 'pending' | 'active' | 'rejected';
-  idIssueDate?: string;
-  idExpiryDate?: string;
-  idRejectionReason?: string;
-  role: string;
-  createdAt: string;
+  phone: string;
+  gpa: number;
+  exitExam: string;
+  status: 'pending' | 'approved' | 'rejected';
+  appliedAt: string;
+  jobId: {
+    _id: string;
+    title: string;
+    department: string;
+  };
 };
 
-export default function IDApprovalsPage() {
+type Credentials = {
+  username: string;
+  password: string;
+  name: string;
+  employeeId?: string;
+  qrCode?: string;
+};
+
+export default function AdminApplicationsPage() {
   const { isAuthenticated, isAdmin } = useAuth();
   const router = useRouter();
-  const [users, setUsers] = useState<UserWithID[]>([]);
+  const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [selectedUser, setSelectedUser] = useState<UserWithID | null>(null);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [showRejectModal, setShowRejectModal] = useState(false);
+  
+  // State for password modal
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newCredentials, setNewCredentials] = useState<Credentials | null>(null);
+  const [copySuccess, setCopySuccess] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -56,125 +70,137 @@ export default function IDApprovalsPage() {
     } else if (!isAdmin) {
       router.push('/');
     } else {
-      fetchUsers();
+      fetchApplications();
     }
   }, [isAuthenticated, isAdmin, router]);
 
-  const fetchUsers = async () => {
+  const fetchApplications = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('https://job-portal-dvmp.onrender.com/api/users', {
-        headers: { 'Authorization': `Bearer ${token}` },
+      const response = await fetch('https://job-portal-dvmp.onrender.com/api/applications', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
       
       const data = await response.json();
       
       if (response.ok) {
-        // Filter only applicants with ID photos
-        const applicants = data.data.filter((u: UserWithID) => 
-          u.role === 'applicant' && u.idPhoto
-        );
-        setUsers(applicants);
+        setApplications(data.data);
+      } else {
+        setError(data.error || 'Failed to fetch applications');
       }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      setError('Failed to connect to server');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprove = async (userId: string) => {
-    setActionLoading(userId);
-    
-    try {
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/users/${userId}/id-approve`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        // Update local state
-        setUsers(users.map(user => 
-          user._id === userId 
-            ? { 
-                ...user, 
-                idStatus: 'active',
-                idNumber: data.data.idNumber,
-                idIssueDate: data.data.idIssueDate,
-                idExpiryDate: data.data.idExpiryDate
-              } 
-            : user
-        ));
-        
-        if (selectedUser?._id === userId) {
-          setSelectedUser(null);
-          setShowModal(false);
-        }
-      } else {
-        alert(data.error || 'Failed to approve ID');
-      }
-    } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to approve ID');
-    } finally {
-      setActionLoading(null);
-    }
+  const copyToClipboard = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopySuccess(`${field} copied!`);
+    setTimeout(() => setCopySuccess(''), 2000);
   };
 
-  const handleReject = async (userId: string) => {
-    if (!rejectReason.trim()) {
-      alert('Please provide a rejection reason');
-      return;
-    }
-
-    setActionLoading(userId);
+  const handleStatusChange = async (applicationId: string, newStatus: 'approved' | 'rejected') => {
+    setActionLoading(applicationId);
     
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/users/${userId}/id-reject`, {
+      if (!token) {
+        alert('You are not logged in. Please login again.');
+        router.push('/login');
+        return;
+      }
+
+      console.log('🔍 STEP 1: Attempting to', newStatus, 'application:', applicationId);
+      
+      const endpoint = newStatus === 'approved' ? 'approve' : 'reject';
+      const url = `https://job-portal-dvmp.onrender.com/api/applications/${applicationId}/${endpoint}`;
+      
+      console.log('🔍 STEP 2: Sending request to:', url);
+      
+      const response = await fetch(url, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ reason: rejectReason }),
       });
 
+      console.log('🔍 STEP 3: Response status:', response.status);
+      
       const data = await response.json();
+      console.log('🔍 STEP 4: Full response data:', JSON.stringify(data, null, 2));
+      
+      // Log specific parts we need
+      console.log('🔍 STEP 5: data.success:', data.success);
+      console.log('🔍 STEP 6: data.data:', data.data);
+      console.log('🔍 STEP 7: data.data?.user:', data.data?.user);
+      console.log('🔍 STEP 8: data.data?.user?.password:', data.data?.user?.password);
+      console.log('🔍 STEP 9: data.data?.employee:', data.data?.employee);
 
       if (response.ok) {
         // Update local state
-        setUsers(users.map(user => 
-          user._id === userId 
-            ? { 
-                ...user, 
-                idStatus: 'rejected',
-                idRejectionReason: rejectReason
-              } 
-            : user
+        setApplications(applications.map(app => 
+          app._id === applicationId ? { ...app, status: newStatus } : app
         ));
         
-        setShowRejectModal(false);
-        setRejectReason('');
+        // If approved and we have user data with password
+        if (newStatus === 'approved') {
+          // Check different possible response structures
+          if (data.data?.user?.password) {
+            console.log('🔍 STEP 10: Found credentials in data.data.user');
+            setNewCredentials({
+              username: data.data.user.username,
+              password: data.data.user.password,
+              name: data.data.user.name || data.data.user.username,
+              employeeId: data.data.employee?.employeeId,
+              qrCode: data.data.employee?.qrCode
+            });
+            setShowPasswordModal(true);
+          } 
+          else if (data.user?.password) {
+            console.log('🔍 STEP 10: Found credentials in data.user');
+            setNewCredentials({
+              username: data.user.username,
+              password: data.user.password,
+              name: data.user.name || data.user.username,
+              employeeId: data.employee?.employeeId,
+              qrCode: data.employee?.qrCode
+            });
+            setShowPasswordModal(true);
+          }
+          else if (data.data?.password) {
+            console.log('🔍 STEP 10: Found credentials in data.data');
+            setNewCredentials({
+              username: data.data.username,
+              password: data.data.password,
+              name: data.data.name || data.data.username
+            });
+            setShowPasswordModal(true);
+          }
+          else {
+            console.log('🔍 STEP 10: No credentials found in response');
+            alert(`Application approved successfully!`);
+          }
+        } else {
+          alert(`Application rejected successfully!`);
+        }
         
-        if (selectedUser?._id === userId) {
-          setSelectedUser(null);
+        // If modal is open, close it
+        if (selectedApp?._id === applicationId) {
+          setSelectedApp(null);
           setShowModal(false);
         }
       } else {
-        alert(data.error || 'Failed to reject ID');
+        alert(data.error || `Failed to ${newStatus} application (Status: ${response.status})`);
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Failed to reject ID');
+      console.error('❌ Error details:', error);
+      alert('Failed to update application status. Check console for details (F12)');
     } finally {
       setActionLoading(null);
     }
@@ -189,11 +215,11 @@ export default function IDApprovalsPage() {
             Pending
           </span>
         );
-      case 'active':
+      case 'approved':
         return (
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
             <CheckCircle className="h-3 w-3 mr-1" />
-            Active
+            Approved
           </span>
         );
       case 'rejected':
@@ -208,13 +234,14 @@ export default function IDApprovalsPage() {
     }
   };
 
-  const filteredUsers = users.filter(user => {
+  const filteredApplications = applications.filter(app => {
     const matchesSearch = 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (user.idNumber && user.idNumber.toLowerCase().includes(searchTerm.toLowerCase()));
+      app.applicantName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      app.jobId?.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (app.exitExam && app.exitExam.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    const matchesStatus = filterStatus === 'all' || user.idStatus === filterStatus;
+    const matchesStatus = statusFilter === 'all' || app.status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
@@ -229,20 +256,38 @@ export default function IDApprovalsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Copy Success Notification */}
+      {copySuccess && (
+        <div className="fixed top-4 right-4 bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded-lg shadow-lg z-50">
+          {copySuccess}
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center gap-4">
-            <Link href="/admin/dashboard" className="p-2 hover:bg-gray-100 rounded-lg">
-              <ArrowLeft className="h-5 w-5 text-gray-600" />
-            </Link>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                ID Card Approvals
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Review and approve applicant ID photos
-              </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <Link 
+                href="/admin/dashboard" 
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5 text-gray-600" />
+              </Link>
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                  Manage Applications
+                </h1>
+                <p className="text-gray-600 mt-1">
+                  Review and process job applications
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-gray-500" />
+              <span className="text-gray-700 font-medium">
+                Total: {applications.length}
+              </span>
             </div>
           </div>
         </div>
@@ -250,6 +295,12 @@ export default function IDApprovalsPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
         {/* Filters */}
         <div className="bg-white rounded-xl shadow-sm p-4 mb-6">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -257,156 +308,133 @@ export default function IDApprovalsPage() {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search by name, email, or ID number..."
+                placeholder="Search by name, email, job title, or exit exam..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="active">Active</option>
-              <option value="rejected">Rejected</option>
-            </select>
+            <div className="flex items-center gap-2">
+              <Filter className="h-5 w-5 text-gray-400" />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
           </div>
         </div>
 
-        {/* Stats Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-lg p-4 border border-gray-200">
-            <p className="text-sm text-gray-600">Total Submissions</p>
-            <p className="text-2xl font-bold">{users.length}</p>
-          </div>
-          <div className="bg-yellow-50 rounded-lg p-4 border border-yellow-200">
-            <p className="text-sm text-yellow-600">Pending</p>
-            <p className="text-2xl font-bold text-yellow-700">
-              {users.filter(u => u.idStatus === 'pending').length}
-            </p>
-          </div>
-          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-            <p className="text-sm text-green-600">Active</p>
-            <p className="text-2xl font-bold text-green-700">
-              {users.filter(u => u.idStatus === 'active').length}
-            </p>
-          </div>
-          <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-            <p className="text-sm text-red-600">Rejected</p>
-            <p className="text-2xl font-bold text-red-700">
-              {users.filter(u => u.idStatus === 'rejected').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Users Grid */}
-        {filteredUsers.length === 0 ? (
+        {/* Applications Grid */}
+        {filteredApplications.length === 0 ? (
           <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <IdCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No ID submissions found</h3>
+            <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No applications found</h3>
             <p className="text-gray-600">
-              {searchTerm ? 'Try adjusting your search' : 'Waiting for applicants to upload photos'}
+              {searchTerm || statusFilter !== 'all' 
+                ? 'Try adjusting your filters' 
+                : 'No applications have been submitted yet'}
             </p>
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredUsers.map((user) => (
-              <div key={user._id} className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-                <div className="p-6">
-                  {/* Header with Status */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
-                        {user.idPhoto ? (
-                          <img 
-                            src={user.idPhoto} 
-                            alt={user.name}
-                            className="w-full h-full object-cover"
-                          />
+            {filteredApplications.map((app) => (
+              <div
+                key={app._id}
+                className="bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden"
+              >
+                {/* Header with status */}
+                <div className="p-6 border-b border-gray-100">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="bg-blue-100 p-2 rounded-lg">
+                      <Briefcase className="h-5 w-5 text-blue-600" />
+                    </div>
+                    {getStatusBadge(app.status)}
+                  </div>
+                  
+                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    {app.applicantName}
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-2 flex items-center">
+                    <Briefcase className="h-3 w-3 mr-1" />
+                    {app.jobId?.title || 'Unknown Job'}
+                  </p>
+                </div>
+
+                {/* Details */}
+                <div className="p-6 space-y-3">
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                    <span className="truncate">{app.email}</span>
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                    {app.phone}
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <GraduationCap className="h-4 w-4 mr-2 text-gray-400" />
+                    GPA: {app.gpa}
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <FileText className="h-4 w-4 mr-2 text-gray-400" />
+                    Exit: {app.exitExam || 'N/A'}
+                  </div>
+                  <div className="flex items-center text-sm text-gray-600">
+                    <Calendar className="h-4 w-4 mr-2 text-gray-400" />
+                    {new Date(app.appliedAt).toLocaleDateString()}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="bg-gray-50 p-4 flex gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedApp(app);
+                      setShowModal(true);
+                    }}
+                    className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
+                  >
+                    <Eye className="h-4 w-4" />
+                    View
+                  </button>
+                  
+                  {app.status === 'pending' && (
+                    <>
+                      <button
+                        onClick={() => handleStatusChange(app._id, 'approved')}
+                        disabled={actionLoading === app._id}
+                        className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 transition-colors text-sm font-medium flex items-center justify-center gap-1 disabled:bg-green-300 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading === app._id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <User className="h-8 w-8 text-gray-400" />
-                          </div>
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            Approve
+                          </>
                         )}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{user.name}</h3>
-                        <p className="text-sm text-gray-500">{user.email}</p>
-                      </div>
-                    </div>
-                    {getStatusBadge(user.idStatus)}
-                  </div>
-
-                  {/* Details */}
-                  <div className="space-y-2 mb-4">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                      {user.email}
-                    </div>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                      {user.phone || 'No phone'}
-                    </div>
-                    {user.idNumber && (
-                      <div className="flex items-center text-sm text-gray-600">
-                        <IdCard className="h-4 w-4 mr-2 text-gray-400" />
-                        <span className="font-mono">{user.idNumber}</span>
-                      </div>
-                    )}
-                    {user.idRejectionReason && (
-                      <div className="flex items-center text-sm text-red-600">
-                        <AlertCircle className="h-4 w-4 mr-2" />
-                        <span className="text-xs">{user.idRejectionReason}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedUser(user);
-                        setShowModal(true);
-                      }}
-                      className="flex-1 bg-blue-600 text-white py-2 px-3 rounded-lg hover:bg-blue-700 text-sm font-medium flex items-center justify-center gap-1"
-                    >
-                      <Eye className="h-4 w-4" />
-                      Review
-                    </button>
-                    
-                    {user.idStatus === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => handleApprove(user._id)}
-                          disabled={actionLoading === user._id}
-                          className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 text-sm font-medium flex items-center justify-center gap-1 disabled:bg-green-300"
-                        >
-                          {actionLoading === user._id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          ) : (
-                            <>
-                              <CheckCircle className="h-4 w-4" />
-                              Approve
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedUser(user);
-                            setShowRejectModal(true);
-                          }}
-                          disabled={actionLoading === user._id}
-                          className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 text-sm font-medium flex items-center justify-center gap-1 disabled:bg-red-300"
-                        >
-                          <XCircle className="h-4 w-4" />
-                          Reject
-                        </button>
-                      </>
-                    )}
-                  </div>
+                      </button>
+                      <button
+                        onClick={() => handleStatusChange(app._id, 'rejected')}
+                        disabled={actionLoading === app._id}
+                        className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 transition-colors text-sm font-medium flex items-center justify-center gap-1 disabled:bg-red-300 disabled:cursor-not-allowed"
+                      >
+                        {actionLoading === app._id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <XCircle className="h-4 w-4" />
+                            Reject
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -414,99 +442,92 @@ export default function IDApprovalsPage() {
         )}
       </div>
 
-      {/* Review Modal */}
-      {showModal && selectedUser && (
+      {/* View Details Modal */}
+      {showModal && selectedApp && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">Review ID Card</h2>
+                <h2 className="text-2xl font-bold text-gray-900">Application Details</h2>
                 <button
                   onClick={() => setShowModal(false)}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   <XCircle className="h-6 w-6 text-gray-500" />
                 </button>
               </div>
             </div>
 
-            <div className="p-6">
-              {/* ID Card Preview */}
-              <div className="border-2 border-gray-200 rounded-xl p-6 bg-gradient-to-br from-blue-50 to-white mb-6">
-                <div className="flex flex-col md:flex-row gap-6">
-                  {/* Photo */}
-                  <div className="flex flex-col items-center">
-                    <div className="w-40 h-48 bg-gray-200 rounded-lg border-2 border-gray-300 overflow-hidden">
-                      {selectedUser.idPhoto ? (
-                        <img 
-                          src={selectedUser.idPhoto} 
-                          alt="ID Photo"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <User className="h-12 w-12 text-gray-400" />
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">3x4 Photo</p>
-                  </div>
+            <div className="p-6 space-y-6">
+              {/* Status */}
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">Status</span>
+                {getStatusBadge(selectedApp.status)}
+              </div>
 
-                  {/* ID Details */}
-                  <div className="flex-1">
-                    <h3 className="text-xl font-bold mb-4">ID Card Preview</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-sm text-gray-500">Full Name</p>
-                        <p className="font-semibold">{selectedUser.name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">ID Number</p>
-                        <p className="font-mono font-bold text-blue-600">
-                          {selectedUser.idNumber || 'Not Generated'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Date of Issue</p>
-                        <p>{selectedUser.idIssueDate ? new Date(selectedUser.idIssueDate).toLocaleDateString() : 'Pending'}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Status</p>
-                        {getStatusBadge(selectedUser.idStatus)}
-                      </div>
-                    </div>
-                  </div>
+              {/* Applicant Info */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-3">Applicant Information</h3>
+                <div className="space-y-2">
+                  <p><span className="text-gray-600">Name:</span> {selectedApp.applicantName}</p>
+                  <p><span className="text-gray-600">Email:</span> {selectedApp.email}</p>
+                  <p><span className="text-gray-600">Phone:</span> {selectedApp.phone}</p>
+                </div>
+              </div>
+
+              {/* Academic Info */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-3">Academic Information</h3>
+                <div className="space-y-2">
+                  <p><span className="text-gray-600">GPA:</span> {selectedApp.gpa}</p>
+                  <p><span className="text-gray-600">Exit Exam:</span> {selectedApp.exitExam}</p>
+                </div>
+              </div>
+
+              {/* Job Info */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="font-semibold text-gray-900 mb-3">Job Information</h3>
+                <div className="space-y-2">
+                  <p><span className="text-gray-600">Position:</span> {selectedApp.jobId?.title}</p>
+                  <p><span className="text-gray-600">Department:</span> {selectedApp.jobId?.department}</p>
+                  <p><span className="text-gray-600">Applied:</span> {new Date(selectedApp.appliedAt).toLocaleString()}</p>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              {selectedUser.idStatus === 'pending' && (
-                <div className="flex gap-3">
+              {selectedApp.status === 'pending' && (
+                <div className="flex gap-3 pt-4">
                   <button
                     onClick={() => {
-                      handleApprove(selectedUser._id);
+                      handleStatusChange(selectedApp._id, 'approved');
                     }}
-                    disabled={actionLoading === selectedUser._id}
-                    className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
+                    disabled={actionLoading === selectedApp._id}
+                    className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:bg-green-300"
                   >
-                    {actionLoading === selectedUser._id ? (
+                    {actionLoading === selectedApp._id ? (
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                     ) : (
                       <>
                         <CheckCircle className="h-5 w-5" />
-                        Approve ID Card
+                        Approve Application
                       </>
                     )}
                   </button>
                   <button
                     onClick={() => {
-                      setShowModal(false);
-                      setShowRejectModal(true);
+                      handleStatusChange(selectedApp._id, 'rejected');
                     }}
-                    className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 font-medium flex items-center justify-center gap-2"
+                    disabled={actionLoading === selectedApp._id}
+                    className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:bg-red-300"
                   >
-                    <XCircle className="h-5 w-5" />
-                    Reject ID Card
+                    {actionLoading === selectedApp._id ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <>
+                        <XCircle className="h-5 w-5" />
+                        Reject Application
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -515,46 +536,112 @@ export default function IDApprovalsPage() {
         </div>
       )}
 
-      {/* Reject Modal */}
-      {showRejectModal && selectedUser && (
+      {/* Password Generation Modal */}
+      {showPasswordModal && newCredentials && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-md w-full">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-gray-900">Reject ID Card</h2>
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 sticky top-0 bg-white">
+              <h2 className="text-2xl font-bold text-gray-900">🎉 Application Approved!</h2>
             </div>
-            <div className="p-6">
-              <p className="text-gray-600 mb-4">
-                Please provide a reason for rejecting {selectedUser.name}'s ID card:
-              </p>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="e.g., Photo is not clear, wrong size, etc."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
-                rows={4}
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleReject(selectedUser._id)}
-                  disabled={actionLoading === selectedUser._id}
-                  className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 font-medium disabled:bg-red-300"
-                >
-                  {actionLoading === selectedUser._id ? (
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>
-                  ) : (
-                    'Confirm Rejection'
-                  )}
-                </button>
-                <button
-                  onClick={() => {
-                    setShowRejectModal(false);
-                    setRejectReason('');
-                  }}
-                  className="flex-1 bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 font-medium"
-                >
-                  Cancel
-                </button>
+            
+            <div className="p-6 space-y-6">
+              {/* Login Credentials Section */}
+              <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+                <h3 className="font-semibold text-green-800 mb-3 flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5" />
+                  Login Credentials
+                </h3>
+                <p className="text-green-700 text-sm mb-3">
+                  Share these credentials with <span className="font-bold">{newCredentials.name}</span>:
+                </p>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm text-gray-600 block mb-1">Username</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white p-3 rounded-lg border border-green-300 font-mono text-lg">
+                        {newCredentials.username}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(newCredentials.username, 'Username')}
+                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        title="Copy username"
+                      >
+                        <Copy className="h-4 w-4 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="text-sm text-gray-600 block mb-1">Password</label>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 bg-white p-3 rounded-lg border border-green-300 font-mono text-lg">
+                        {newCredentials.password}
+                      </code>
+                      <button
+                        onClick={() => copyToClipboard(newCredentials.password, 'Password')}
+                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                        title="Copy password"
+                      >
+                        <Copy className="h-4 w-4 text-gray-600" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
+
+              {/* Employee ID Section - if available in response */}
+              {newCredentials.employeeId && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                  <h3 className="font-semibold text-blue-800 mb-3 flex items-center gap-2">
+                    <IdCard className="h-5 w-5" />
+                    Employee ID Generated
+                  </h3>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-sm text-gray-600 block mb-1">Employee ID</label>
+                      <code className="block bg-white p-3 rounded-lg border border-blue-300 font-mono">
+                        {newCredentials.employeeId}
+                      </code>
+                    </div>
+                    
+                    {/* QR Code if available */}
+                    {newCredentials.qrCode && (
+                      <div className="mt-3 text-center">
+                        <label className="text-sm text-gray-600 block mb-2">QR Code</label>
+                        <img 
+                          src={newCredentials.qrCode} 
+                          alt="QR Code" 
+                          className="w-32 h-32 mx-auto border border-gray-300 rounded-lg"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              <div className="bg-yellow-50 border border-yellow-200 p-4 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <span className="font-bold">⚠️ Important Security Notice:</span>
+                </p>
+                <ul className="text-sm text-yellow-700 mt-2 list-disc list-inside">
+                  <li>These credentials will only be shown <span className="font-bold">ONCE</span></li>
+                  <li>Share them securely with the applicant</li>
+                  <li>They can login at <code className="bg-yellow-100 px-1">/login</code> with these credentials</li>
+                  <li>Password cannot be retrieved later for security reasons</li>
+                  <li>Ask applicant to change password after first login</li>
+                </ul>
+              </div>
+              
+              <button
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setNewCredentials(null);
+                }}
+                className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              >
+                I've Saved the Credentials
+              </button>
             </div>
           </div>
         </div>
