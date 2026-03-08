@@ -17,7 +17,8 @@ import {
   Phone,
   Calendar,
   Download,
-  Eye
+  Eye,
+  AlertCircle
 } from 'lucide-react';
 
 type UserWithID = {
@@ -31,6 +32,7 @@ type UserWithID = {
   idStatus: 'pending' | 'active' | 'rejected';
   idIssueDate?: string;
   idExpiryDate?: string;
+  idRejectionReason?: string;
   role: string;
   createdAt: string;
 };
@@ -45,6 +47,8 @@ export default function IDApprovalsPage() {
   const [selectedUser, setSelectedUser] = useState<UserWithID | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -79,13 +83,13 @@ export default function IDApprovalsPage() {
     }
   };
 
-  const handleIDApproval = async (userId: string, action: 'approve' | 'reject') => {
+  const handleApprove = async (userId: string) => {
     setActionLoading(userId);
     
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/users/${userId}/id-${action}`, {
+      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/users/${userId}/id-approve`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -101,9 +105,10 @@ export default function IDApprovalsPage() {
           user._id === userId 
             ? { 
                 ...user, 
-                idStatus: action === 'approve' ? 'active' : 'rejected',
-                idNumber: action === 'approve' ? data.data.idNumber : user.idNumber,
-                idIssueDate: action === 'approve' ? new Date().toISOString() : user.idIssueDate
+                idStatus: 'active',
+                idNumber: data.data.idNumber,
+                idIssueDate: data.data.idIssueDate,
+                idExpiryDate: data.data.idExpiryDate
               } 
             : user
         ));
@@ -113,11 +118,63 @@ export default function IDApprovalsPage() {
           setShowModal(false);
         }
       } else {
-        alert(data.error || `Failed to ${action} ID`);
+        alert(data.error || 'Failed to approve ID');
       }
     } catch (error) {
       console.error('Error:', error);
-      alert('Failed to process request');
+      alert('Failed to approve ID');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReject = async (userId: string) => {
+    if (!rejectReason.trim()) {
+      alert('Please provide a rejection reason');
+      return;
+    }
+
+    setActionLoading(userId);
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      const response = await fetch(`https://job-portal-dvmp.onrender.com/api/users/${userId}/id-reject`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ reason: rejectReason }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Update local state
+        setUsers(users.map(user => 
+          user._id === userId 
+            ? { 
+                ...user, 
+                idStatus: 'rejected',
+                idRejectionReason: rejectReason
+              } 
+            : user
+        ));
+        
+        setShowRejectModal(false);
+        setRejectReason('');
+        
+        if (selectedUser?._id === userId) {
+          setSelectedUser(null);
+          setShowModal(false);
+        }
+      } else {
+        alert(data.error || 'Failed to reject ID');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Failed to reject ID');
     } finally {
       setActionLoading(null);
     }
@@ -149,12 +206,6 @@ export default function IDApprovalsPage() {
       default:
         return null;
     }
-  };
-
-  const generateIDNumber = () => {
-    const year = new Date().getFullYear().toString().slice(-2);
-    const random = Math.floor(10000 + Math.random() * 90000);
-    return `ID-${year}-${random}`;
   };
 
   const filteredUsers = users.filter(user => {
@@ -268,7 +319,7 @@ export default function IDApprovalsPage() {
                   {/* Header with Status */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden">
+                      <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden">
                         {user.idPhoto ? (
                           <img 
                             src={user.idPhoto} 
@@ -277,7 +328,7 @@ export default function IDApprovalsPage() {
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <User className="h-6 w-6 text-gray-400" />
+                            <User className="h-8 w-8 text-gray-400" />
                           </div>
                         )}
                       </div>
@@ -305,6 +356,12 @@ export default function IDApprovalsPage() {
                         <span className="font-mono">{user.idNumber}</span>
                       </div>
                     )}
+                    {user.idRejectionReason && (
+                      <div className="flex items-center text-sm text-red-600">
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        <span className="text-xs">{user.idRejectionReason}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions */}
@@ -323,7 +380,7 @@ export default function IDApprovalsPage() {
                     {user.idStatus === 'pending' && (
                       <>
                         <button
-                          onClick={() => handleIDApproval(user._id, 'approve')}
+                          onClick={() => handleApprove(user._id)}
                           disabled={actionLoading === user._id}
                           className="flex-1 bg-green-600 text-white py-2 px-3 rounded-lg hover:bg-green-700 text-sm font-medium flex items-center justify-center gap-1 disabled:bg-green-300"
                         >
@@ -337,18 +394,15 @@ export default function IDApprovalsPage() {
                           )}
                         </button>
                         <button
-                          onClick={() => handleIDApproval(user._id, 'reject')}
+                          onClick={() => {
+                            setSelectedUser(user);
+                            setShowRejectModal(true);
+                          }}
                           disabled={actionLoading === user._id}
                           className="flex-1 bg-red-600 text-white py-2 px-3 rounded-lg hover:bg-red-700 text-sm font-medium flex items-center justify-center gap-1 disabled:bg-red-300"
                         >
-                          {actionLoading === user._id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          ) : (
-                            <>
-                              <XCircle className="h-4 w-4" />
-                              Reject
-                            </>
-                          )}
+                          <XCircle className="h-4 w-4" />
+                          Reject
                         </button>
                       </>
                     )}
@@ -430,7 +484,7 @@ export default function IDApprovalsPage() {
                 <div className="flex gap-3">
                   <button
                     onClick={() => {
-                      handleIDApproval(selectedUser._id, 'approve');
+                      handleApprove(selectedUser._id);
                     }}
                     disabled={actionLoading === selectedUser._id}
                     className="flex-1 bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
@@ -446,22 +500,61 @@ export default function IDApprovalsPage() {
                   </button>
                   <button
                     onClick={() => {
-                      handleIDApproval(selectedUser._id, 'reject');
+                      setShowModal(false);
+                      setShowRejectModal(true);
                     }}
-                    disabled={actionLoading === selectedUser._id}
                     className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 font-medium flex items-center justify-center gap-2"
                   >
-                    {actionLoading === selectedUser._id ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    ) : (
-                      <>
-                        <XCircle className="h-5 w-5" />
-                        Reject ID Card
-                      </>
-                    )}
+                    <XCircle className="h-5 w-5" />
+                    Reject ID Card
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900">Reject ID Card</h2>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-600 mb-4">
+                Please provide a reason for rejecting {selectedUser.name}'s ID card:
+              </p>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g., Photo is not clear, wrong size, etc."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 mb-4"
+                rows={4}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleReject(selectedUser._id)}
+                  disabled={actionLoading === selectedUser._id}
+                  className="flex-1 bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 font-medium disabled:bg-red-300"
+                >
+                  {actionLoading === selectedUser._id ? (
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>
+                  ) : (
+                    'Confirm Rejection'
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowRejectModal(false);
+                    setRejectReason('');
+                  }}
+                  className="flex-1 bg-gray-100 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-200 font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>
